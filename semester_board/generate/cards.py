@@ -4,6 +4,7 @@
 다시 넣으면 모델을 부르지 않는다. 자료를 고쳐 올리면 해시가 바뀌어 자동으로
 다시 만든다.
 """
+import re
 from pathlib import Path
 
 from ..ingest.cache import Cache
@@ -39,7 +40,7 @@ def plan_course(llm, cache: Cache, key, name, syllabus_paths, weeks=16, verbose=
     text, used = _read(syllabus_paths, verbose)
     if not text.strip():
         return None, []
-    ck = Cache.key("course/v1", llm.model, name, weeks, text)
+    ck = Cache.key("course/v2", llm.model, name, weeks, text)
     hit = cache.get(ck)
     if hit:
         if verbose:
@@ -58,7 +59,7 @@ def write_week(llm, cache: Cache, course_name, w, material_paths,
     text, used = _read(material_paths, verbose)
     if not text.strip():
         return None, []
-    ck = Cache.key("week/v1", llm.model, course_name, w, planned_topic, text)
+    ck = Cache.key("week/v2", llm.model, course_name, w, planned_topic, text)
     hit = cache.get(ck)
     if hit:
         if verbose:
@@ -115,11 +116,26 @@ def find_concepts(llm, cache: Cache, profile, verbose=True):
     return cache.put(ck, out)
 
 
+TAG = re.compile(r"</?[a-zA-Z][^>]*>")
+
+
+def plain(s: str) -> str:
+    """짧은 항목에서 태그를 걷어낸다.
+
+    학수번호·담당·수업·교재와 주차 제목은 화면에서 escape 되어 나가는 자리라,
+    태그가 섞이면 <code>TBA</code> 가 글자 그대로 보인다. 프롬프트로도 막지만
+    모델이 늘 지킨다고 볼 수 없어 여기서 한 번 더 지운다.
+    """
+    return TAG.sub("", s or "").strip()
+
+
 def merge_course(course: dict, plan: dict, weeks=16):
     """plan_course 결과를 프로필의 과목 dict 에 붙인다 (사람이 쓴 것은 덮지 않는다)."""
-    for f in ("code", "prof", "time", "book", "note"):
+    for f in ("code", "prof", "time", "book"):
         if plan.get(f) and not course.get(f):
-            course[f] = plan[f]
+            course[f] = plain(plan[f])
+    if plan.get("note") and not course.get("note"):
+        course["note"] = plan["note"]          # note 는 태그를 그대로 렌더한다
     if plan.get("grading") and not course.get("grading"):
         course["grading"] = plan["grading"]
 
@@ -128,7 +144,8 @@ def merge_course(course: dict, plan: dict, weeks=16):
         if w["w"] in have or not (1 <= w["w"] <= weeks):
             continue
         course.setdefault("weeks", []).append(
-            {"w": w["w"], "t": w["t"], "q": w.get("q", ""), "src": "s", "pts": []})
+            {"w": w["w"], "t": plain(w["t"]), "q": w.get("q", ""),
+             "src": "s", "pts": []})
     course["weeks"] = sorted(course.get("weeks") or [], key=lambda x: x["w"])
 
     if not course.get("tasks"):
@@ -167,7 +184,7 @@ def merge_week(course: dict, w: int, card: dict):
         tgt = {"w": w}
         weeks.append(tgt)
         weeks.sort(key=lambda x: x["w"])
-    tgt["t"] = card.get("t") or tgt.get("t", "")
+    tgt["t"] = plain(card.get("t") or "") or tgt.get("t", "")
     tgt["q"] = card.get("q") or tgt.get("q", "")
     tgt["pts"] = card.get("pts") or []
     tgt["src"] = "m"

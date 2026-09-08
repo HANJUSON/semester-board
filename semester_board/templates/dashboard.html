@@ -1126,7 +1126,9 @@ function matHTML(k,w){
        '<span class="ty">LMS</span><span class="nm">'+esc(f.t)+'</span></a>';
   });
   loc.forEach(function(p){
-    h+='<span class="matlink local"><span class="ty">내 PC</span><span class="nm">'+esc(p)+'</span></span>';
+    var seg=String(p).split(/[\\/]/).filter(Boolean), shortp=seg.slice(-2).join('/');
+    h+='<span class="matlink local" title="'+esc(p)+'"><span class="ty">내 PC</span>'+
+       '<span class="nm">'+esc(shortp)+'</span></span>';
   });
   h+='<a class="matlink" href="'+modURL(k,w)+'" target="_blank" rel="noopener"><span class="ty">LMS</span><span class="nm">'+w+'주차 강의실 열기</span></a>';
   h+='</div></div>';
@@ -1219,10 +1221,11 @@ function viewCourse(k,jumpWeek){
   h+='<header class="chead"><div class="crumb"><a href="#/">상황판</a> / 과목</div>'+
      '<h1>'+esc(co.n)+'</h1>'+
      '<div class="cfacts">'+
-     '<span><b>학수번호</b>'+esc(co.code)+'</span>'+
-     (co.prof!=='—'?'<span><b>담당</b>'+esc(co.prof)+'</span>':'')+
-     '<span><b>수업</b>'+esc(co.time)+'</span>'+
-     '<span><b>교재</b>'+esc(co.book)+'</span></div>'+
+     [['학수번호',co.code],['담당',co.prof],
+      ['수업',co.time],['교재',co.book]]
+       .filter(function(f){ return f[1] && f[1]!=='—'; })
+       .map(function(f){ return '<span><b>'+f[0]+'</b>'+esc(f[1])+'</span>'; }).join('')+
+     '</div>'+
      '<div class="cgrade">'+gradeBarHTML(k)+'</div>'+
      (co.note?'<div class="notice">'+co.note+'</div>':'')+
      '</header>';
@@ -1240,9 +1243,9 @@ function viewCourse(k,jumpWeek){
      (pr.w!=='—'?'<div class="wgt">'+pr.w+'<small>비중</small></div>':'')+'</div>'+
      '<p class="aim">'+pr.aim+'</p>'+
      '<div class="gcols">'+
-     '<div class="gcol"><h4>산출물</h4><ul>'+(pr.out||[]).map(function(s){return '<li>'+esc(s)+'</li>';}).join('')+'</ul></div>'+
+     '<div class="gcol"><h4>산출물</h4><ul>'+(pr.out||[]).map(function(s){return '<li>'+s+'</li>';}).join('')+'</ul></div>'+
      '<div class="gcol"><h4>지금 굴려볼 아이디어</h4><ul>'+(pr.idea||[]).map(function(s){return '<li>'+s+'</li>';}).join('')+'</ul></div>'+
-     '<div class="gcol"><h4>스스로 점검</h4><ul>'+(pr.ck||[]).map(function(s){return '<li>'+esc(s)+'</li>';}).join('')+'</ul></div>'+
+     '<div class="gcol"><h4>스스로 점검</h4><ul>'+(pr.ck||[]).map(function(s){return '<li>'+s+'</li>';}).join('')+'</ul></div>'+
      '</div>'+
      '<div class="memo"><label for="memo-'+k+'">내 아이디어 메모<span class="savemark" id="mk-'+k+'">저장됨</span></label>'+
      '<textarea id="memo-'+k+'" placeholder="이번 주 배운 것 중 프로젝트에 쓸 수 있는 것, 떠오른 주제, 확인할 것…"></textarea>'+

@@ -111,9 +111,12 @@ def cmd_pull(a):
     for c in res["courses"]:
         k = c["key"]
         if k not in prof["courses"]:
-            prof["courses"][k] = P.blank_course(c["title"])
+            prof["courses"][k] = P.blank_course(c["title"], prof=c.get("prof", ""))
             prof["courseOrder"].append(k)
             added.append(f"{k}({c['title']})")
+        elif c.get("prof") and not prof["courses"][k].get("prof"):
+            # LMS 가 담당교수를 알고 있는데 프로필이 비어 있으면 채운다
+            prof["courses"][k]["prof"] = c["prof"]
 
     got = infer_week1_from(res)
     cur = prof["semester"].get("week1Monday")
@@ -175,7 +178,10 @@ def cmd_generate(a):
     path = ws.profile_path(pid)
     prof = P.load(path)
     nw = prof["semester"].get("weeks", 16)
-    llm = LLM(model=a.model, effort=a.effort, dry_run=a.dry_run)
+    llm = LLM(model=a.model, effort=a.effort, dry_run=a.dry_run,
+              backend=a.backend)
+    if not a.dry_run:
+        print(f"백엔드: {llm.backend} · 모델: {llm.model}")
     cache = Cache(ws.cache)
     keys = [a.course] if a.course else list(prof["courseOrder"])
 
@@ -342,6 +348,8 @@ def main(argv=None):
     s.add_argument("--model", default="claude-opus-5")
     s.add_argument("--effort", default="high",
                    choices=["low", "medium", "high", "xhigh", "max"])
+    s.add_argument("--backend", choices=["api", "claude-cli"],
+                   help="api=anthropic SDK(키 필요) · claude-cli=설치된 claude 명령")
     s.add_argument("--dry-run", action="store_true", help="호출 없이 대상만 보기")
     s.set_defaults(fn=cmd_generate)
 

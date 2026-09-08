@@ -113,7 +113,8 @@ class Canvas:
         return self._self
 
     def courses(self):
-        return self.get("/courses?enrollment_state=active&per_page=100")
+        return self.get("/courses?enrollment_state=active"
+                        "&include[]=teachers&per_page=100")
 
     def modules(self, cid):
         return self.try_get(f"/courses/{cid}/modules?include[]=items&per_page=100")

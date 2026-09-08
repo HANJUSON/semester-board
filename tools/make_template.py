@@ -16,10 +16,35 @@ s = open(src, encoding="utf-8").read()
 L = s.split("\n")
 
 
-def cut(a, b, new):
-    """1-indexed 줄 범위 [a,b]를 new 로 바꾼다 (뒤에서 앞으로 호출할 것)."""
+def _find(pat, start=0):
+    """정규식에 맞는 첫 줄의 0-indexed 위치. 없으면 죽는다."""
+    rx = re.compile(pat)
+    for i in range(start, len(L)):
+        if rx.search(L[i]):
+            return i
+    raise SystemExit(f"원본에서 찾지 못했습니다: {pat}")
+
+
+def _close(start):
+    """블록 시작 줄에서 최상위 종료(`];` 또는 `};`)를 찾는다."""
+    for i in range(start + 1, len(L)):
+        if L[i].rstrip() in ("];", "};"):
+            return i
+    raise SystemExit(f"블록의 끝을 찾지 못했습니다 (줄 {start + 1})")
+
+
+def block(start_pat, end_pat=None):
+    """(시작, 끝) 0-indexed 포함 범위. 원본이 바뀌어도 따라간다."""
+    a = _find(start_pat)
+    b = _find(end_pat, a + 1) - 1 if end_pat else _close(a)
+    return a, b
+
+
+def cut(rng, new):
+    """block() 이 준 범위를 new 로 바꾼다 (뒤에서 앞으로 호출할 것)."""
     global L
-    L = L[: a - 1] + ([new] if new is not None else []) + L[b:]
+    a, b = rng
+    L = L[:a] + ([new] if new is not None else []) + L[b + 1:]
 
 
 def rep(old, new, n=1):
@@ -28,17 +53,25 @@ def rep(old, new, n=1):
     s = s.replace(old, new, n)
 
 
+# 범위를 먼저 전부 계산한다 — 하나를 자르면 뒤의 줄 번호가 밀리기 때문이다.
+_r0 = block(r"^var CTERM=\[")
+_r1 = block(r"^var CMAP=\[")
+_r2 = block(r"^var CRS={")
+_r3 = block(r"^var P=\[")
+_r4 = block(r"^var C={", r"^T\.forEach\(")
+_r5 = block(r"^/\* ===== \ud559\uc0ac \uc8fc\ucc28", r"^function weekStart\(")
+
 # ── 1) 줄 범위 치환: 뒤에서 앞으로 ────────────────────────────────
-cut(1331, 1346, "var CTERM = PROFILE.terms || [];")
-cut(1242, 1328, "var CMAP = PROFILE.concepts || [];")
-cut(1124, 1139, "/* CRS 는 위 CORDER 루프에서 PROFILE.courses[].grading/materials 로 채운다 */")
-cut(1093, 1120, """var P=(PROFILE.highlights||[]).map(function(p){
+cut(_r0, "var CTERM = PROFILE.terms || [];")
+cut(_r1, "var CMAP = PROFILE.concepts || [];")
+cut(_r2, "/* CRS 는 위 CORDER 루프에서 PROFILE.courses[].grading/materials 로 채운다 */")
+cut(_r3, """var P=(PROFILE.highlights||[]).map(function(p){
   return {c:p.course,t:p.title,w:p.weight,minor:!!p.minor,of:p.of,d:p.d,
           ms:(p.milestones||[]).map(function(m){
             return {d:(m.date?ymdParse(m.date):weekEnd(m.week)),n:m.n,p:m.p};
           })};
 });""")
-cut(546, 1084, """var CV=(PROFILE.school&&PROFILE.school.canvas)||'';
+cut(_r4, """var CV=(PROFILE.school&&PROFILE.school.canvas)||'';
 var C={},CORDER=(PROFILE.courseOrder||[]).slice(),WK={},LOCAL={},PROJ={},CRS={},T=[];
 CORDER.forEach(function(k){
   var c=PROFILE.courses[k]; if(!c) return;
@@ -71,7 +104,7 @@ function modURL(c,w){
 }""")
 
 # W1 · 주차 수 · 시험 주차를 프로필에서 끌어온다
-cut(529, 530, """/* ===== 학사 주차: PROFILE.semester 에서 온다 ===== */
+cut(_r5, """/* ===== 학사 주차: PROFILE.semester 에서 온다 ===== */
 function ymdParse(v){ var p=String(v).split('-'); return new Date(+p[0],+p[1]-1,+p[2]); }
 var SEM=PROFILE.semester||{}, NW=SEM.weeks||16;
 var EXAMW=SEM.examWeeks||{};
@@ -105,6 +138,32 @@ rep('<span class="idx">16W</span>\ud559\uae30 \uc804\uccb4 \ud750\ub984</h2><spa
     '<span class="idx">\'+NW+\'W</span>\ud559\uae30 \uc804\uccb4 \ud750\ub984</h2><span class="hint">\'+fmt2(weekStart(1))+\' \u2013 \'+fmt2(weekEnd(NW))+\'</span>')
 rep('<span class="idx">16W</span>\uc8fc\ucc28\ubcc4 \ud559\uc2b5 \uc9c0\ub3c4',
     '<span class="idx">\'+NW+\'W</span>\uc8fc\ucc28\ubcc4 \ud559\uc2b5 \uc9c0\ub3c4')
+# 값이 없는 과목 정보 항목은 라벨째 빼둔다 (학수번호·수업이 비면 라벨만 떠 있었다)
+rep("""     '<div class="cfacts">'+
+     '<span><b>\ud559\uc218\ubc88\ud638</b>'+esc(co.code)+'</span>'+
+     (co.prof!=='\u2014'?'<span><b>\ub2f4\ub2f9</b>'+esc(co.prof)+'</span>':'')+
+     '<span><b>\uc218\uc5c5</b>'+esc(co.time)+'</span>'+
+     '<span><b>\uad50\uc7ac</b>'+esc(co.book)+'</span></div>'+""",
+    """     '<div class="cfacts">'+
+     [['\ud559\uc218\ubc88\ud638',co.code],['\ub2f4\ub2f9',co.prof],
+      ['\uc218\uc5c5',co.time],['\uad50\uc7ac',co.book]]
+       .filter(function(f){ return f[1] && f[1]!=='\u2014'; })
+       .map(function(f){ return '<span><b>'+f[0]+'</b>'+esc(f[1])+'</span>'; }).join('')+
+     '</div>'+""")
+
+# 프로젝트 산출물·점검 항목만 esc() 로 나가 태그가 글자로 보였다. aim·idea 와 통일한다.
+rep("""(pr.out||[]).map(function(s){return '<li>'+esc(s)+'</li>';})""",
+    """(pr.out||[]).map(function(s){return '<li>'+s+'</li>';})""")
+rep("""(pr.ck||[]).map(function(s){return '<li>'+esc(s)+'</li>';})""",
+    """(pr.ck||[]).map(function(s){return '<li>'+s+'</li>';})""")
+
+# 내 PC 자료는 절대경로가 그대로 찍혀 칩이 화면을 넘겼다. 끝 두 조각만 보이고
+# 전체 경로는 툴팁으로 넘긴다.
+rep("""    h+='<span class="matlink local"><span class="ty">\ub0b4 PC</span><span class="nm">'+esc(p)+'</span></span>';""",
+    """    var seg=String(p).split(/[\\\\/]/).filter(Boolean), shortp=seg.slice(-2).join('/');
+    h+='<span class="matlink local" title="'+esc(p)+'"><span class="ty">\ub0b4 PC</span>'+
+       '<span class="nm">'+esc(shortp)+'</span></span>';""")
+
 rep("if(homeWeek<16)", "if(homeWeek<NW)")
 rep("var vw=(jumpWeek>=1 && jumpWeek<=16)?jumpWeek:cw;", "var vw=(jumpWeek>=1 && jumpWeek<=NW)?jumpWeek:cw;")
 rep("for(w=1;w<=16;w++) h+=", "for(w=1;w<=NW;w++) h+=")

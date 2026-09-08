@@ -64,7 +64,10 @@ def pull(school: dict, token=None, verbose=True):
         key = _key_for(title, raw, cid, taken)
         short = title[:8]
         lms["courses"][key] = {"id": cid, "short": short, "name": title}
-        found.append({"key": key, "id": cid, "title": title})
+        teachers = [t.get("display_name") for t in (c.get("teachers") or [])
+                    if t.get("display_name")]
+        found.append({"key": key, "id": cid, "title": title,
+                      "prof": " · ".join(teachers)})
 
         mods = cv.modules(cid)
         mmap = {}
