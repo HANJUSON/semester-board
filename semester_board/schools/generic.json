@@ -1,0 +1,13 @@
+{
+  "id": "generic",
+  "name": "일반 Canvas",
+  "short": "LMS",
+  "canvas": "",
+  "learningx": null,
+  "semesterWeeks": 16,
+  "examWeeks": { "8": "중간", "16": "기말" },
+  "weekPattern": "(?:Week|주차|주)\\s*(\\d+)|(\\d+)\\s*주차",
+  "courseNamePattern": null,
+  "langPattern": null,
+  "excludeCourses": []
+}

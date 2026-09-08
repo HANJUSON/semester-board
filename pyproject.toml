@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "semester-board"
+version = "0.1.0"
+description = "LMS와 강의자료로 한 장짜리 학기 상황판을 만드는 로컬 CLI"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+keywords = ["canvas", "lms", "학기", "상황판", "dashboard", "학사일정"]
+classifiers = [
+  "Environment :: Console",
+  "License :: OSI Approved :: MIT License",
+  "Natural Language :: Korean",
+  "Programming Language :: Python :: 3",
+  "Topic :: Education",
+]
+dependencies = []
+
+[project.optional-dependencies]
+# 강의자료를 읽어 주차 내용을 생성할 때만 필요하다.
+generate = ["anthropic>=0.40"]
+# pdftotext(poppler)가 없는 환경용 대체 경로.
+pdf = ["pypdf>=4"]
+hwp = ["pyhwp>=0.1b12"]
+dev = ["pytest>=8"]
+
+[project.scripts]
+semester-board = "semester_board.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/HANJUSON/semester-board"
+
+[tool.setuptools]
+packages = ["semester_board", "semester_board.sources", "semester_board.ingest",
+            "semester_board.generate"]
+
+[tool.setuptools.package-data]
+semester_board = ["templates/*.html", "schools/*.json"]

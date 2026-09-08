@@ -1,0 +1,13 @@
+{
+  "id": "ku",
+  "name": "고려대학교",
+  "short": "KU LMS",
+  "canvas": "https://canvas.korea.ac.kr",
+  "learningx": { "host": "https://mylms.korea.ac.kr", "toolId": 2 },
+  "semesterWeeks": 16,
+  "examWeeks": { "8": "중간", "16": "기말" },
+  "weekPattern": "(\\d+)\\s*주차",
+  "courseNamePattern": "\\(세종-학부\\)(?P<title>[^(]+)",
+  "langPattern": "\\b(Kor|Eng)\\b",
+  "excludeCourses": ["인권과 성평등", "교직", "채플"]
+}
