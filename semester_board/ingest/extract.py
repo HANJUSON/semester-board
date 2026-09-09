@@ -66,21 +66,36 @@ def _pdf(p: Path) -> str:
 
 
 def _ooxml(p: Path, ext: str) -> str:
-    """pptx/docx/hwpx 는 zip 속 XML 이다. 텍스트 노드만 순서대로 긁는다."""
+    """pptx/docx/hwpx 는 zip 속 XML 이다. 문단 단위로 텍스트 노드를 긁는다.
+
+    태그 이름 뒤에 공백이나 '>' 가 오도록 반드시 막아야 한다. <w:t[^>]*> 로
+    쓰면 <w:tbl> · <w:tc> · <w:tr> 까지 함께 매치돼서, 표가 있는 문서는 본문
+    대신 XML 마크업이 통째로 딸려 나온다(강의계획서 docx 실측 45배).
+
+    한 문단의 텍스트 조각(run)은 문장 중간에서 갈리므로 공백을 지우지 않고
+    이어 붙이고, 줄 단위로만 정리한다.
+    """
     want = {".pptx": "ppt/slides/slide", ".docx": "word/document",
             ".hwpx": "Contents/section"}[ext]
     tag = {".pptx": "a:t", ".docx": "w:t", ".hwpx": "hp:t"}[ext]
+    para = {".pptx": "a:p", ".docx": "w:p", ".hwpx": "hp:p"}[ext]
+    text_re = re.compile(rf"<{tag}(?:\s[^>]*)?>(.*?)</{tag}>", re.S)
+    para_re = re.compile(rf"</{para}\s*>")
+
     chunks = []
     with zipfile.ZipFile(p) as z:
         names = sorted((n for n in z.namelist() if n.startswith(want) and n.endswith(".xml")),
                        key=_natural)
         for n in names:
             xml = z.read(n).decode("utf-8", "replace")
-            texts = re.findall(rf"<{tag}[^>]*>(.*?)</{tag}>", xml, re.S)
-            body = "\n".join(_unescape(t) for t in texts if t.strip())
-            if body:
+            lines = []
+            for para_xml in para_re.split(xml):          # 문단 하나가 곧 한 줄
+                line = "".join(_unescape(t) for t in text_re.findall(para_xml)).strip()
+                if line:
+                    lines.append(line)
+            if lines:
                 label = f"\n--- {Path(n).stem} ---\n" if ext == ".pptx" else "\n"
-                chunks.append(label + body)
+                chunks.append(label + "\n".join(lines))
     if not chunks:
         raise Unsupported(f"{p.name}: 글자를 찾지 못했습니다 (이미지 기반 문서일 수 있습니다).")
     return "\n".join(chunks)
@@ -109,7 +124,7 @@ def _unescape(s: str) -> str:
     for a, b in (("&lt;", "<"), ("&gt;", ">"), ("&quot;", '"'),
                  ("&apos;", "'"), ("&amp;", "&")):
         s = s.replace(a, b)
-    return s.strip()
+    return s
 
 
 def page_count(path) -> int | None:

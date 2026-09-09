@@ -108,6 +108,35 @@ def test_extract_text_and_subtitles(tmp_path):
     assert extract(v).splitlines() == ["첫 줄", "두 줄"]
 
 
+def test_ooxml_ignores_table_tags(tmp_path):
+    """<w:t[^>]*> 는 <w:tbl>·<w:tc>·<w:tr> 까지 삼켜 마크업이 통째로 새어 나왔다.
+
+    실제 강의계획서 docx 에서 8천자가 35만자로 부풀었던 버그다.
+    """
+    import zipfile
+    doc = (
+        '<?xml version="1.0"?>'
+        '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+        '<w:body>'
+        '<w:p><w:r><w:t xml:space="preserve">Apache </w:t></w:r>'
+        '<w:r><w:t>Spark</w:t></w:r></w:p>'
+        '<w:tbl><w:tblPr><w:tblW w:w="9000"/></w:tblPr>'
+        '<w:tr><w:tc><w:p><w:r><w:t>2주차</w:t></w:r></w:p></w:tc></w:tr></w:tbl>'
+        '<w:p><w:r><w:t>마지막 줄</w:t></w:r></w:p>'
+        '</w:body></w:document>'
+    )
+    f = tmp_path / "a.docx"
+    with zipfile.ZipFile(f, "w") as z:
+        z.writestr("word/document.xml", doc)
+
+    out = extract(f)
+    assert "<" not in out, out                      # 마크업이 새면 안 된다
+    assert "w:tbl" not in out and "9000" not in out
+    assert "Apache Spark" in out                    # 문단 안 run 은 공백을 지킨다
+    lines = [x for x in out.splitlines() if x.strip()]
+    assert lines == ["Apache Spark", "2주차", "마지막 줄"], lines
+
+
 def test_prompt_schemas_are_strict():
     """구조화 출력은 required 가 빠지거나 additionalProperties 가 열리면 깨진다."""
     def check(node, path="root"):
