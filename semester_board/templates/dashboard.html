@@ -558,7 +558,8 @@ var CV=(PROFILE.school&&PROFILE.school.canvas)||'';
 var C={},CORDER=(PROFILE.courseOrder||[]).slice(),WK={},LOCAL={},PROJ={},CRS={},T=[];
 CORDER.forEach(function(k){
   var c=PROFILE.courses[k]; if(!c) return;
-  C[k]={n:c.name,s:c.short,code:c.code,prof:c.prof,time:c.time,book:c.book,note:c.note};
+  C[k]={n:c.name,s:c.short,code:c.code,prof:c.prof,time:c.time,book:c.book,
+        note:c.note,board:c.board};
   WK[k]=c.weeks||[];
   LOCAL[k]=c.local||{};
   if(c.project){
@@ -1131,6 +1132,10 @@ function matHTML(k,w){
        '<span class="nm">'+esc(shortp)+'</span></span>';
   });
   h+='<a class="matlink" href="'+modURL(k,w)+'" target="_blank" rel="noopener"><span class="ty">LMS</span><span class="nm">'+w+'주차 강의실 열기</span></a>';
+  if(C[k] && C[k].board && id){
+    h+='<a class="matlink" href="'+CV+'/courses/'+id+'/external_tools/'+C[k].board+'" target="_blank" rel="noopener">'+
+       '<span class="ty">LMS</span><span class="nm">강의자료실 게시판</span></a>';
+  }
   h+='</div></div>';
   return h;
 }

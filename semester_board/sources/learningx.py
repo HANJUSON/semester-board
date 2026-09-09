@@ -94,3 +94,82 @@ def attendance_items(modules, week_re):
                             "external_url": ext,
                             "is_video": not DATE_TITLE.match(it["title"])})
     return out
+
+
+# ── 게시판(강의자료실) ────────────────────────────────────────
+# Canvas 모듈만 보면 자료를 통째로 놓친다. 한국 대학 LMS 는 강의자료실을
+# LearningX 게시판에 두는 경우가 많고, 실제로 어떤 과목은 Canvas 모듈이
+# 전부 비어 있는데 게시판에는 자료가 5건 올라와 있었다.
+BOARD_API = "/learningx_board/courses/{cid}/boards"
+
+
+class Boards:
+    """LearningX 게시판. LTI 런치는 영상 쪽과 같은 방식이라 재사용한다."""
+
+    def __init__(self, canvas, host, tool_id=5):
+        self.canvas = canvas
+        self.host = host.rstrip("/")
+        self.api = self.host + "/learningx/api/v1"
+        self.tool_id = tool_id
+
+    def _session(self, cid):
+        """게시판 도구로 LTI 런치 → (opener, xn_api_token)."""
+        url = self.canvas.get(
+            f"/courses/{cid}/external_tools/sessionless_launch?id={self.tool_id}",
+            paginate=False)["url"]
+        cj = http.cookiejar.CookieJar()
+        op = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj))
+        op.addheaders = [("User-Agent", UA)]
+        page = op.open(url, timeout=40).read().decode("utf-8", "replace")
+        m = re.search(r'<form[^>]*\baction="([^"]+)"[^>]*>(.*?)</form>', page, re.S | re.I)
+        if not m:
+            raise RuntimeError("게시판 LTI 폼을 찾지 못했습니다")
+        fields = {}
+        for tag in re.findall(r"<input\b[^>]*>", m.group(2), re.I):
+            n = re.search(r'\bname="([^"]*)"', tag)
+            v = re.search(r'\bvalue="([^"]*)"', tag)
+            if n:
+                fields[htmlmod.unescape(n.group(1))] = \
+                    htmlmod.unescape(v.group(1)) if v else ""
+        op.open(urllib.request.Request(
+            htmlmod.unescape(m.group(1)),
+            data=urllib.parse.urlencode(fields).encode(),
+            headers={"Content-Type": "application/x-www-form-urlencoded",
+                     "Referer": self.canvas.base.rsplit("/api", 1)[0] + "/"}),
+            timeout=40).read()
+        return op, next((c.value for c in cj if c.name == "xn_api_token"), "")
+
+    def _get(self, op, tok, path):
+        req = urllib.request.Request(self.api + path, headers={
+            "Accept": "application/json", "User-Agent": UA,
+            "Referer": self.host + "/learningx/", "Authorization": "Bearer " + tok})
+        with op.open(req, timeout=30) as r:
+            return json.loads(r.read().decode("utf-8", "replace"))
+
+    def fetch(self, cid, with_attachments=True):
+        """[{board, title, at, attachments:[이름…], unread}] — 글이 있는 게시판만."""
+        op, tok = self._session(cid)
+        out = []
+        for b in self._get(op, tok, BOARD_API.format(cid=cid)) or []:
+            if not b.get("total_post_count"):
+                continue
+            posts = (self._get(
+                op, tok, f"{BOARD_API.format(cid=cid)}/{b['id']}/posts") or {}).get("items", [])
+            for p in posts:
+                rec = {"board": b.get("title"), "board_id": b["id"], "slug": b.get("slug"),
+                       "post_id": p["id"], "title": p.get("title"),
+                       "at": (p.get("created_at") or "")[:10],
+                       "by": p.get("user_name"),
+                       "n_att": p.get("attachment_count") or 0,
+                       "unread": (p.get("user_view_count") or 0) == 0,
+                       "files": []}
+                if with_attachments and rec["n_att"]:
+                    try:
+                        d = self._get(op, tok,
+                                      f"{BOARD_API.format(cid=cid)}/{b['id']}/posts/{p['id']}")
+                        rec["files"] = [a.get("filename") or a.get("display_name")
+                                        for a in (d.get("attachments") or [])]
+                    except Exception:
+                        pass
+                out.append(rec)
+        return out

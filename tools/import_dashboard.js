@@ -71,6 +71,7 @@ for (const k of G.CORDER) {
   const c = G.C[k], crs = G.CRS[k] || {}, pj = G.PROJ[k];
   courses[k] = {
     name: c.n, short: c.s, code: c.code, prof: c.prof, time: c.time, book: c.book, note: c.note,
+    board: c.board || null,
     grading: (crs.parts || []).map(p => ({ label: p[0], pct: p[1], kind: p[2] })),
     materials: (crs.mat || []).map(x => ({ have: !!x[0], text: x[1] })),
     project: pj ? { title: pj.t, weight: pj.w, minor: !!pj.minor, aim: pj.aim,

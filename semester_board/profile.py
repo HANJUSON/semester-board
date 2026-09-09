@@ -30,7 +30,7 @@ def blank(pid, school, semester_label, week1_monday, weeks=16, exam_weeks=None):
 
 def blank_course(name, short=None, code="", prof="", time="", book="", note=""):
     return {"name": name, "short": short or name[:8], "code": code, "prof": prof,
-            "time": time, "book": book, "note": note,
+            "time": time, "book": book, "note": note, "board": None,
             "grading": [], "materials": [], "project": None,
             "weeks": [], "local": {}, "tasks": []}
 

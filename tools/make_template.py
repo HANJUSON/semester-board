@@ -75,7 +75,8 @@ cut(_r4, """var CV=(PROFILE.school&&PROFILE.school.canvas)||'';
 var C={},CORDER=(PROFILE.courseOrder||[]).slice(),WK={},LOCAL={},PROJ={},CRS={},T=[];
 CORDER.forEach(function(k){
   var c=PROFILE.courses[k]; if(!c) return;
-  C[k]={n:c.name,s:c.short,code:c.code,prof:c.prof,time:c.time,book:c.book,note:c.note};
+  C[k]={n:c.name,s:c.short,code:c.code,prof:c.prof,time:c.time,book:c.book,
+        note:c.note,board:c.board};
   WK[k]=c.weeks||[];
   LOCAL[k]=c.local||{};
   if(c.project){

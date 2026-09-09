@@ -10,7 +10,7 @@ import unicodedata
 from .. import week as W
 from ..config import course_title, week_re
 from .canvas import Canvas, CanvasError
-from .learningx import LearningX, attendance_items
+from .learningx import Boards, LearningX, attendance_items
 
 
 STOP = {"AND", "OF", "THE", "FOR", "IN", "TO", "WITH", "ON", "A", "AN"}
@@ -52,7 +52,7 @@ def pull(school: dict, token=None, verbose=True):
     skip = school.get("excludeCourses") or []
 
     lms = {"courses": {}, "mods": {}, "vids": [], "att": [], "files": [],
-           "asg": [], "done": [], "status": {}, "asof": ""}
+           "asg": [], "posts": [], "done": [], "status": {}, "asof": ""}
     taken, found, week_votes = set(), [], []
 
     for c in cv.courses():
@@ -128,10 +128,28 @@ def pull(school: dict, token=None, verbose=True):
                 if verbose:
                     print(f"  [{key}] 출석 정보 실패: {type(e).__name__} {e}")
 
+        # 게시판(강의자료실) — Canvas 모듈이 비어 있어도 여기 자료가 있을 수 있다
+        n_post = 0
+        if lx_cfg and lx_cfg.get("boardToolId"):
+            try:
+                bd = Boards(cv, lx_cfg["host"], lx_cfg["boardToolId"])
+                for rec in bd.fetch(cid):
+                    rec["c"] = key
+                    lms["posts"].append(rec)
+                    n_post += 1
+            except Exception as e:
+                if verbose:
+                    print(f"  [{key}] 게시판 실패: {type(e).__name__} {e}")
+
         if verbose:
             print(f"  [{key}] {title} — 모듈 {len(mmap)}주 · 자료 "
                   f"{sum(1 for f in lms['files'] if f['c'] == key)} · 영상 {len(vids)} · "
-                  f"과제 {sum(1 for a in lms['asg'] if a['c'] == key)}")
+                  f"과제 {sum(1 for a in lms['asg'] if a['c'] == key)}"
+                  + (f" · 게시판 {n_post}" if n_post else ""))
+            for rec in lms["posts"][-n_post:] if n_post else []:
+                if rec["unread"]:
+                    files = (" — " + ", ".join(rec["files"])) if rec["files"] else ""
+                    print(f"        새 글  {rec['at']}  [{rec['board']}] {rec['title']}{files}")
 
     lms["done"] = sorted(set(lms["done"]))
     lms["asof"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
