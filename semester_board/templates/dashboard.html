@@ -176,6 +176,13 @@ a.crs:hover{background:var(--accent-soft);color:var(--accent-ink)}
 .task.done .pill{background:var(--surface-2);color:var(--ink-3);box-shadow:none}
 .empty{padding:24px 20px;border:1px dashed var(--line-2);background:var(--surface);color:var(--ink-3);font-size:14px;text-align:center}
 .empty b{display:block;color:var(--ink-2);font-weight:500;margin-bottom:3px}
+.empty b[style]{display:inline!important}
+.estbox{margin-top:20px;padding-top:16px;border-top:1px dashed var(--line-2)}
+.esthead{font-family:var(--ff-mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--ink-3);margin-bottom:11px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.esthead b{color:var(--ink-2);font-weight:600;letter-spacing:0;text-transform:none;font-size:11.5px}
+.estbox .task{opacity:.72}
+.estbox .task:hover{opacity:1}
 .task .ttl a.tlink{color:inherit;text-decoration:none;border-bottom:1px solid transparent}
 .task .ttl a.tlink:hover{color:var(--accent-ink);border-bottom-color:var(--accent)}
 .ext{font-family:var(--ff-mono);font-size:9.5px;font-weight:600;letter-spacing:.08em;margin-left:7px;padding:2px 5px;border-radius:2px;background:var(--surface-2);color:var(--ink-3);vertical-align:1.5px;white-space:nowrap}
@@ -579,6 +586,46 @@ CORDER.forEach(function(k){
   });
 });
 
+/* ===== LMS 확정 마감 =====
+   프로필의 tasks 는 강의계획서의 주차만 보고 추정한 것이라 실제와 어긋난다.
+   실제로 내야 하는 것은 LMS 에 제출란이 열린 것뿐이므로 그쪽을 확정(real)으로
+   두고, 추정은 참고로 내린다. 확정이 생긴 과목은 추정을 버린다. */
+function dayOf(d){ var x=new Date(d); x.setHours(0,0,0,0); return x; }
+function hhmm(d){ var p=function(n){return n<10?'0'+n:''+n}; return p(d.getHours())+':'+p(d.getMinutes()); }
+function asgKind(a){
+  var n=a.n||'';
+  if(a.st==='online_quiz') return '퀴즈';
+  if(a.st==='on_paper' || /midterm|final exam|중간|기말/i.test(n)) return '시험';
+  if(/presentation|발표/i.test(n)) return '발표';
+  if(/project|proposal|프로젝트|제안/i.test(n)) return '프로젝트';
+  return '과제';
+}
+var ANOTE=PROFILE.assignmentNotes||{};
+var SUPERSEDED=PROFILE.supersededEstimates||{};   /* {과목키:true | 과목키:['퀴즈',…]} */
+var EST=T; T=[];
+(LMS.asg||[]).forEach(function(a){
+  if(!a.due) return;                       /* 마감이 없으면 제출 대상이 아니다 */
+  var at=new Date(a.due), day=dayOf(at);
+  T.push({id:'a'+a.i,c:a.c,t:a.n,kind:asgKind(a),real:true,at:at,date:day,
+          w:Math.floor((day-W1)/86400000/7)+1,
+          pts:(a.pts!=null?a.pts+'점':''),url:a.url,sub:a.sub,state:a.state,lock:a.lock,
+          note:ANOTE[a.i]||''});
+});
+EST.forEach(function(x){
+  var sup=SUPERSEDED[x.c];
+  if(sup===true) return;
+  if(sup && sup.indexOf(x.kind)>=0) return;
+  T.push(x);
+});
+function realTasks(w){
+  return T.filter(function(x){ return x.real && (w?x.w===w:true); })
+          .sort(function(a,b){ return a.at-b.at; });
+}
+function nextReal(from){
+  return T.filter(function(x){ return x.real && x.date>=from; })
+          .sort(function(a,b){ return a.at-b.at; })[0] || null;
+}
+
 /* LMS 링크 헬퍼 — 데이터가 아니라 로직이라 그대로 남긴다 */
 function courseId(c){ return LMS.courses[c] ? LMS.courses[c].id : null; }
 function modURL(c,w){
@@ -587,10 +634,18 @@ function modURL(c,w){
   return m ? CV+'/courses/'+id+'/modules#module_'+m : CV+'/courses/'+id+'/modules';
 }
 T.forEach(function(x,i){
-  x.id='t'+i;
+  if(!x.id) x.id='t'+i;
   if(!x.date && x.w) x.date=weekEnd(x.w);
   if(x.date && !x.w) x.w=Math.floor((x.date-W1)/86400000/7)+1;
 });
+function realTasks(w){
+  return T.filter(function(x){ return x.real && (w?x.w===w:true); })
+          .sort(function(a,b){ return a.at-b.at; });
+}
+function nextReal(from){
+  return T.filter(function(x){ return x.real && x.date>=from; })
+          .sort(function(a,b){ return a.at-b.at; })[0] || null;
+}
 function tasksOf(c){ return T.filter(function(x){ return x.c===c; }); }
 
 /* ===== 홈: 최종 프로젝트 카드 ===== */
@@ -617,6 +672,8 @@ try{
     ST.seen=JSON.parse(localStorage.getItem(SBKEY+'seen')||'{}');
   }
 }catch(e){}
+/* LMS 에 제출 기록이 있는 과제는 체크를 켜 둔다 */
+T.forEach(function(x){ if(x.real && x.sub && !ST.done[x.id]) ST.done[x.id]=1; });
 var DBH=null, saveTimer=null;
 function saveNow(){
   ST.ts=Date.now();
@@ -655,36 +712,11 @@ function vidMin(g){ return g.sec ? Math.round(g.sec/60)+'분' : ''; }
 function vidsOf(c,w){ return VIDG.filter(function(g){ return g.c===c && (w?g.w===w:true); }); }
 function filesOf(c,w){ return (LMS.files||[]).filter(function(f){ return f.c===c && f.w===w; }); }
 
-/* 과제 ↔ Canvas 과제 매칭 */
-var ASGKEY=[
-  ['bd','제안서','Proposal submission'],
-  ['bd','중간고사','Midterm'],
-  ['bd','Final Project 발표','Final Project Presentation'],
-  ['bd','Final Project 보고서','Final Project Report Submission']
-];
-function findAsg(x){
-  for(var i=0;i<ASGKEY.length;i++){
-    var k=ASGKEY[i];
-    if(x.c===k[0] && x.t.indexOf(k[1])>=0){
-      for(var j=0;j<LMS.asg.length;j++){
-        var a=LMS.asg[j];
-        if(a.c===k[0] && a.n.replace(/\s+$/,'')===k[2]) return a;
-      }
-    }
-  }
-  return null;
-}
-function lmsURL(x){
-  var id=courseId(x.c); if(!id) return null;
-  var a=findAsg(x);
-  if(a) return CV+'/courses/'+id+'/assignments/'+a.i;
-  return modURL(x.c,x.w);
-}
+function lmsURL(x){ return x.real && x.url ? x.url : modURL(x.c,x.w); }
 function linkTitle(x){
   var u=lmsURL(x); if(!u) return esc(x.t);
-  var real=!!findAsg(x);
-  return '<a class="tlink'+(real?' real':'')+'" href="'+u+'" target="_blank" rel="noopener">'+
-         esc(x.t)+'<span class="ext">'+(real?'제출 ↗':'강의실 ↗')+'</span></a>';
+  return '<a class="tlink'+(x.real?' real':'')+'" href="'+u+'" target="_blank" rel="noopener">'+
+         esc(x.t)+'<span class="ext">'+(x.real?'제출 ↗':'강의실 ↗')+'</span></a>';
 }
 function urgency(d){
   var n=days(d);
@@ -783,11 +815,13 @@ function statsHTML(){
   var unseen=vatt.filter(function(g){ return !isSeen(g); }).length;
   var vover=vatt.filter(function(g){ return vidDueOver(g) && !isSeen(g); }).length;
   var cw=curWeek();
-  var thisWeekDue=T.filter(function(x){ return x.w===cw; }).length;
+  var thisWeekDue=realTasks(cw).filter(function(x){ return !ST.done[x.id]; }).length;
+  var nx=nextReal(TODAY);
   var h='';
   h+='<div class="stat"><div class="k">현재 주차</div><div class="v">'+cw+'<small>/ '+NW+'주</small></div><div class="n">'+fmt2(weekStart(cw))+' – '+fmt2(weekEnd(cw))+'</div></div>';
   h+='<div class="stat"><div class="k">수강 과목</div><div class="v">7<small>과목</small></div><div class="n">왼쪽 메뉴에서 선택</div></div>';
-  h+='<div class="stat"><div class="k">이번 주 마감</div><div class="v">'+thisWeekDue+'<small>건</small></div><div class="n">아래 목록 참고</div></div>';
+  h+='<div class="stat"><div class="k">이번 주 제출</div><div class="v">'+thisWeekDue+'<small>건</small></div>'+
+     '<div class="n">'+(nx?'다음 마감 '+fmt2(nx.date)+' '+esc(C[nx.c].s):'LMS 확정 기준')+'</div></div>';
   h+='<div class="stat"><div class="k">첫 프로젝트 마감</div><div class="v">D-'+dp+'</div><div class="n">빅데이터 제안서 10/21</div></div>';
   h+='<div class="stat"><div class="k">안 본 강의 영상</div><div class="v">'+unseen+'<small>/ '+vatt.length+'</small></div>'+
      '<div class="n">'+(vover?'출석 마감 지남 '+vover+'개':'출석 반영 영상 기준')+'</div></div>';
@@ -804,8 +838,10 @@ function taskListHTML(items,tbd,showCourse){
     h+='<span class="kind">'+x.kind+(x.pts?' · '+x.pts:'')+'</span></div>';
     if(x.note) h+='<div class="note">'+x.note+'</div>';
     h+='</div>';
-    h+='<div class="due"><div class="d">'+fmt2(x.date)+'('+DOW[x.date.getDay()]+')'+(x.est?' 경':'')+'</div>';
-    h+='<span class="pill '+u[0]+'">'+u[1]+'</span></div></div>';
+    var when=fmt2(x.date)+'('+DOW[x.date.getDay()]+')';
+    if(x.real && x.at) when+=' '+hhmm(x.at); else if(x.est) when+=' 경';
+    h+='<div class="due"><div class="d">'+when+'</div>';
+    h+='<span class="pill '+(x.sub?'calm':u[0])+'">'+(x.sub?'제출함':u[1])+'</span></div></div>';
   });
   (tbd||[]).forEach(function(x){
     h+='<div class="task"><input class="chk" type="checkbox" data-tid="'+x.id+'"'+(ST.done[x.id]?' checked':'')+' aria-label="'+esc(x.t)+' 완료">';
@@ -822,15 +858,23 @@ function renderHomeWeek(){
   $('#wrange').textContent=fmt2(s)+'('+DOW[s.getDay()]+') – '+fmt2(e)+'('+DOW[e.getDay()]+')';
   $('#wtag').innerHTML = homeWeek===curWeek() ? '<span class="wtag">이번 주</span>' : '';
   $('#prev').disabled=homeWeek<=1; $('#next').disabled=homeWeek>=16;
-  var items=T.filter(function(x){ return x.w===homeWeek; });
-  items.sort(function(a,b){ return a.date-b.date || (a.kind==='시험'?-1:1); });
+  var real=realTasks(homeWeek);
+  var est=T.filter(function(x){ return !x.real && x.w===homeWeek; })
+           .sort(function(a,b){ return a.date-b.date || (a.kind==='시험'?-1:1); });
   var tbd=homeWeek===curWeek()?T.filter(function(x){ return x.tbd; }):[];
-  var h;
-  if(!items.length && !tbd.length){
-    h='<div class="empty"><b>이번 주 마감 없음</b>강의계획서 기준으로 제출할 것이 없는 주간입니다.</div>';
+  var h='';
+  if(real.length){
+    h+=taskListHTML(real,[]);
   }else{
-    h=taskListHTML(items,tbd)+
-      '<div class="empty" style="border-top:0">「경」 표시는 강의계획서에 주차만 있고 날짜가 없어 <b style="display:inline">해당 주 일요일로 잡은 추정 마감</b>입니다. 정확한 일시는 LMS 공지를 확인하세요.</div>';
+    var nx=nextReal(weekStart(homeWeek));
+    h+='<div class="empty"><b>LMS 제출 마감 없음</b>'+
+       (nx? '이 주에는 제출란이 열린 것이 없습니다. 다음 확정 마감은 <b style="display:inline">'+
+            nx.w+'주차 · '+esc(C[nx.c].s)+' '+esc(nx.t)+'</b> — '+fmt2(nx.date)+'('+DOW[nx.date.getDay()]+') '+hhmm(nx.at)+' 입니다.'
+          : '남은 확정 마감이 없습니다.')+'</div>';
+  }
+  if(est.length || tbd.length){
+    h+='<div class="estbox"><div class="esthead">계획서 기준 예상<b>LMS에 제출란이 아직 없습니다 · 일정이 바뀔 수 있습니다</b></div>'+
+       taskListHTML(est,tbd)+'</div>';
   }
   $('#tasklist').innerHTML=h;
   wireChecks('#tasklist',renderHomeWeek);
@@ -1090,8 +1134,10 @@ function weekRowHTML(k,x,cw){
   h+=emphHTML(x);
   h+=matHTML(k,x.w);
   if(dueThis.length){
-    h+='<div class="matbox"><h4>이 주차 제출물</h4><div class="tasklist" style="margin-top:10px">'+
-       taskListHTML(dueThis.slice().sort(function(a,b){return a.date-b.date}),[],false)+'</div></div>';
+    var dr=dueThis.filter(function(t){ return t.real; }).sort(function(a,b){ return a.at-b.at; });
+    var de=dueThis.filter(function(t){ return !t.real; }).sort(function(a,b){ return a.date-b.date; });
+    h+='<div class="matbox"><h4>이 주차 제출물'+(dr.length?'':' (계획서 예상)')+'</h4>'+
+       '<div class="tasklist" style="margin-top:10px">'+taskListHTML(dr.concat(de),[],false)+'</div></div>';
   }
   h+='<div class="matbox" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'+
      '<label style="display:flex;align-items:center;gap:9px;font-size:13px;color:var(--ink-2);cursor:pointer">'+
@@ -1112,6 +1158,13 @@ function emphHTML(x){
   return h+'</div>';
 }
 
+function dueBoxHTML(k,w){
+  var dr=T.filter(function(x){ return x.c===k && x.w===w && x.real; })
+          .sort(function(a,b){ return a.at-b.at; });
+  if(!dr.length) return '';
+  return '<div class="matbox"><h4>이 주차 제출 — LMS 확정</h4>'+
+         '<div class="tasklist" style="margin-top:10px">'+taskListHTML(dr,[],false)+'</div></div>';
+}
 function matHTML(k,w){
   var vids=vidsOf(k,w), files=filesOf(k,w), loc=(LOCAL[k]||{})[w]||[];
   var h='<div class="matbox"><h4>이 주차 강의자료</h4><div class="matlist">';
@@ -1182,7 +1235,7 @@ function nowCardHTML(k,w,cw){
     h+='<h3>'+esc(x.t)+'</h3>'+
        (x.q?'<div class="qline"><b>\ud575\uc2ec \uc9c8\ubb38</b> \u2014 '+esc(x.q)+'</div>':'')+
        '<ul class="pts">'+(x.pts||[]).map(function(p){ return '<li><span>'+p+'</span></li>'; }).join('')+'</ul>'+
-       emphHTML(x)+matHTML(k,w)+xoverHTML(k,w);
+       emphHTML(x)+dueBoxHTML(k,w)+matHTML(k,w)+xoverHTML(k,w);
   }else{
     h+='<h3>'+w+'\uc8fc\ucc28 \uacc4\ud68d \uc5c6\uc74c</h3>'+
        '<p class="aim">\uc774 \uacfc\ubaa9\uc758 \uc8fc\ucc28\ubcc4 \uacc4\ud68d\uc5d0 \ud574\ub2f9 \uc8fc\uac00 \uc5c6\uc2b5\ub2c8\ub2e4. \uc55e\ub4a4 \uc8fc\ucc28\ub97c \ud655\uc778\ud574 \ubcf4\uc138\uc694.</p>'+
@@ -1269,11 +1322,18 @@ function viewCourse(k,jumpWeek){
      '</section>';
 
   /* 이 과목 마감 전체 */
-  var mine=tasksOf(k).filter(function(x){ return !x.tbd; }).sort(function(a,b){ return a.date-b.date; });
+  var mreal=tasksOf(k).filter(function(x){ return x.real; }).sort(function(a,b){ return a.at-b.at; });
+  var mest=tasksOf(k).filter(function(x){ return !x.real && !x.tbd; }).sort(function(a,b){ return a.date-b.date; });
   var mtbd=tasksOf(k).filter(function(x){ return x.tbd; });
-  h+='<section><div class="shead"><h2><span class="idx">DUE</span>이 과목 제출물 전체</h2>'+
-     '<span class="hint">'+mine.length+'건'+(mtbd.length?' + 미정 '+mtbd.length+'건':'')+'</span></div>'+
-     '<div class="tasklist" id="ctasks">'+taskListHTML(mine,mtbd,false)+'</div></section>';
+  h+='<section><div class="shead"><h2><span class="idx">DUE</span>이 과목 제출물</h2>'+
+     '<span class="hint">LMS 확정 '+mreal.length+'건'+(mest.length+mtbd.length?' · 계획서 예상 '+(mest.length+mtbd.length)+'건':'')+'</span></div>';
+  h+= mreal.length ? '<div class="tasklist" id="ctasks">'+taskListHTML(mreal,[],false)+'</div>'
+                   : '<div class="empty"><b>LMS 제출란 없음</b>이 과목은 아직 LMS 에 제출할 과제가 등록되지 않았습니다.</div>';
+  if(mest.length||mtbd.length){
+    h+='<div class="estbox"><div class="esthead">계획서 기준 예상<b>LMS에 제출란이 아직 없습니다</b></div>'+
+       '<div class="tasklist">'+taskListHTML(mest,mtbd,false)+'</div></div>';
+  }
+  h+='</section>';
 
   if(vidsOf(k).length) h+=videoSectionHTML(k);
   h+='<footer id="foot"></footer>';
@@ -1452,7 +1512,8 @@ function renderFoot(){
   f.innerHTML=
     '<b>출처</b> — 각 과목 강의계획서(hwp · pdf · pptx · docx)와 강의자료, 그리고 KU LMS(Canvas) API. '+
     '주차별 학습 내용은 확보한 강의자료를 읽고 정리했으며, 자료가 없는 주차는 강의계획서의 주차 계획과 교재 순서로 채웠습니다(각 주차에 표시).<br>'+
-    '<b>마감</b> — 빅데이터 4건만 LMS에 등록된 확정값이고, 나머지는 강의계획서의 주차 정보로 계산한 추정치입니다(「경」 표시).<br>'+
+    '<b>마감</b> — <b>「제출 ↗」가 붙은 것이 LMS에 제출란이 실제로 열린 확정 마감</b>이고 시각까지 정확합니다. '+
+    '그 아래 「계획서 기준 예상」은 강의계획서의 주차만 보고 추정한 것이라(「경」 표시) 실제와 다를 수 있습니다.<br>'+
     '<b>저장</b> — 체크와 메모는 이 브라우저에 저장되고, claude.ai에서 열었을 때는 계정 저장소에도 함께 보관됩니다.<br>'+
     '<b>실시간 출석</b> — <code>python3 lms_serve.py</code>로 열면 새로고침할 때마다 LMS 출석 상태를 다시 읽습니다.<br>'+
     '<b>기준일</b> '+d.getFullYear()+'. '+(d.getMonth()+1)+'. '+d.getDate()+'. ('+DOW[d.getDay()]+')';

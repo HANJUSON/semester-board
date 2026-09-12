@@ -120,7 +120,9 @@ class Canvas:
         return self.try_get(f"/courses/{cid}/modules?include[]=items&per_page=100")
 
     def assignments(self, cid):
-        return self.try_get(f"/courses/{cid}/assignments?per_page=100")
+        # 제출 상태(submission)까지 함께 받아야 '아직 안 낸 것'을 가릴 수 있다
+        return self.try_get(f"/courses/{cid}/assignments"
+                            "?per_page=100&include[]=submission")
 
     def files(self, cid):
         return self.try_get(f"/courses/{cid}/files?per_page=100")

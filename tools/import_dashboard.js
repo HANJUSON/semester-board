@@ -43,7 +43,7 @@ const G = new Function([shim,
   block(/^var CRS=\{/),
   block(/^var CMAP=\[/),
   block(/^var CTERM=\[/),
-  'return {C:C,CORDER:CORDER,LMS:LMS,CV:CV,WK:WK,LOCAL:LOCAL,PROJ:PROJ,T:T,P:P,CRS:CRS,CMAP:CMAP,CTERM:CTERM};'
+  'return {C:C,CORDER:CORDER,LMS:LMS,CV:CV,WK:WK,LOCAL:LOCAL,PROJ:PROJ,T:T,P:P,CRS:CRS,CMAP:CMAP,CTERM:CTERM,ANOTE:(typeof ANOTE!=="undefined"?ANOTE:{})};'
 ].join('\n'))();
 
 const ymd = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') +
@@ -99,7 +99,11 @@ const profile = {
   highlights: G.P.map(p => ({ course: p.c, title: p.t, weight: p.w, minor: !!p.minor,
                               of: p.of, d: p.d, milestones: (p.ms || []).map(normMs) })),
   concepts: G.CMAP,
-  terms: G.CTERM
+  terms: G.CTERM,
+  /* LMS 과제 설명에서 읽은 조건들 (과제 id 기준) */
+  assignmentNotes: G.ANOTE || {},
+  /* LMS 에 확정 과제가 생겨 계획서 추정을 버릴 과목 */
+  supersededEstimates: { bd: true, llm: ['퀴즈'] }
 };
 
 fs.writeFileSync(dst, JSON.stringify(profile, null, 1), 'utf8');

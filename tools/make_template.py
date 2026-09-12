@@ -96,6 +96,46 @@ CORDER.forEach(function(k){
   });
 });
 
+/* ===== LMS 확정 마감 =====
+   프로필의 tasks 는 강의계획서의 주차만 보고 추정한 것이라 실제와 어긋난다.
+   실제로 내야 하는 것은 LMS 에 제출란이 열린 것뿐이므로 그쪽을 확정(real)으로
+   두고, 추정은 참고로 내린다. 확정이 생긴 과목은 추정을 버린다. */
+function dayOf(d){ var x=new Date(d); x.setHours(0,0,0,0); return x; }
+function hhmm(d){ var p=function(n){return n<10?'0'+n:''+n}; return p(d.getHours())+':'+p(d.getMinutes()); }
+function asgKind(a){
+  var n=a.n||'';
+  if(a.st==='online_quiz') return '퀴즈';
+  if(a.st==='on_paper' || /midterm|final exam|중간|기말/i.test(n)) return '시험';
+  if(/presentation|발표/i.test(n)) return '발표';
+  if(/project|proposal|프로젝트|제안/i.test(n)) return '프로젝트';
+  return '과제';
+}
+var ANOTE=PROFILE.assignmentNotes||{};
+var SUPERSEDED=PROFILE.supersededEstimates||{};   /* {과목키:true | 과목키:['퀴즈',…]} */
+var EST=T; T=[];
+(LMS.asg||[]).forEach(function(a){
+  if(!a.due) return;                       /* 마감이 없으면 제출 대상이 아니다 */
+  var at=new Date(a.due), day=dayOf(at);
+  T.push({id:'a'+a.i,c:a.c,t:a.n,kind:asgKind(a),real:true,at:at,date:day,
+          w:Math.floor((day-W1)/86400000/7)+1,
+          pts:(a.pts!=null?a.pts+'점':''),url:a.url,sub:a.sub,state:a.state,lock:a.lock,
+          note:ANOTE[a.i]||''});
+});
+EST.forEach(function(x){
+  var sup=SUPERSEDED[x.c];
+  if(sup===true) return;
+  if(sup && sup.indexOf(x.kind)>=0) return;
+  T.push(x);
+});
+function realTasks(w){
+  return T.filter(function(x){ return x.real && (w?x.w===w:true); })
+          .sort(function(a,b){ return a.at-b.at; });
+}
+function nextReal(from){
+  return T.filter(function(x){ return x.real && x.date>=from; })
+          .sort(function(a,b){ return a.at-b.at; })[0] || null;
+}
+
 /* LMS 링크 헬퍼 — 데이터가 아니라 로직이라 그대로 남긴다 */
 function courseId(c){ return LMS.courses[c] ? LMS.courses[c].id : null; }
 function modURL(c,w){

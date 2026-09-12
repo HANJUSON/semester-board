@@ -85,9 +85,15 @@ def pull(school: dict, token=None, verbose=True):
             lms["mods"][key] = mmap
 
         for a in cv.assignments(cid):
-            lms["asg"].append({"c": key, "n": a.get("name"),
+            sub = a.get("submission") or {}
+            # 마감 시각·제출 페이지·제출 여부까지 담는다. 계획서 추정과 달리
+            # 이쪽이 '실제로 내야 하는 것'이므로 상황판이 이걸 우선으로 쓴다.
+            lms["asg"].append({"c": key, "n": (a.get("name") or "").strip(),
                                "due": a.get("due_at"), "pts": a.get("points_possible"),
-                               "i": a["id"],
+                               "i": a["id"], "url": a.get("html_url"),
+                               "lock": a.get("lock_at"),
+                               "sub": sub.get("submitted_at"),
+                               "state": sub.get("workflow_state"),
                                "st": (a.get("submission_types") or ["none"])[0]})
 
         # 영상 · 출석 (LearningX 가 붙어 있는 학교만)
@@ -145,6 +151,8 @@ def pull(school: dict, token=None, verbose=True):
             print(f"  [{key}] {title} — 모듈 {len(mmap)}주 · 자료 "
                   f"{sum(1 for f in lms['files'] if f['c'] == key)} · 영상 {len(vids)} · "
                   f"과제 {sum(1 for a in lms['asg'] if a['c'] == key)}"
+                  + (f"(마감 {sum(1 for a in lms['asg'] if a['c'] == key and a['due'])})"
+                     if any(a['c'] == key and a['due'] for a in lms['asg']) else "")
                   + (f" · 게시판 {n_post}" if n_post else ""))
             for rec in lms["posts"][-n_post:] if n_post else []:
                 if rec["unread"]:
