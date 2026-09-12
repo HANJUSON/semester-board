@@ -609,6 +609,7 @@ var EST=T; T=[];
   T.push({id:'a'+a.i,c:a.c,t:a.n,kind:asgKind(a),real:true,at:at,date:day,
           w:Math.floor((day-W1)/86400000/7)+1,
           pts:(a.pts!=null?a.pts+'점':''),url:a.url,sub:a.sub,state:a.state,lock:a.lock,
+          unlock:a.unlock?new Date(a.unlock):null, locked:!!a.locked, st:a.st,
           note:ANOTE[a.i]||''});
 });
 EST.forEach(function(x){
@@ -617,6 +618,14 @@ EST.forEach(function(x){
   if(sup && sup.indexOf(x.kind)>=0) return;
   T.push(x);
 });
+var ONLINE={online_upload:1,online_quiz:1,online_text_entry:1,online_url:1,media_recording:1};
+/* 지금 실제로 낼 수 있는 것 — 잠기지 않았고, 아직 안 냈고, 마감 전이며,
+   LMS 로 제출하는 형식인 것. 마감이 다음 주여도 지금 열려 있으면 미리 할 수 있다. */
+function openNow(){
+  return T.filter(function(x){
+    return x.real && !x.locked && !x.sub && ONLINE[x.st] && x.at>=TODAY;
+  }).sort(function(a,b){ return a.at-b.at; });
+}
 function realTasks(w){
   return T.filter(function(x){ return x.real && (w?x.w===w:true); })
           .sort(function(a,b){ return a.at-b.at; });
@@ -638,6 +647,14 @@ T.forEach(function(x,i){
   if(!x.date && x.w) x.date=weekEnd(x.w);
   if(x.date && !x.w) x.w=Math.floor((x.date-W1)/86400000/7)+1;
 });
+var ONLINE={online_upload:1,online_quiz:1,online_text_entry:1,online_url:1,media_recording:1};
+/* 지금 실제로 낼 수 있는 것 — 잠기지 않았고, 아직 안 냈고, 마감 전이며,
+   LMS 로 제출하는 형식인 것. 마감이 다음 주여도 지금 열려 있으면 미리 할 수 있다. */
+function openNow(){
+  return T.filter(function(x){
+    return x.real && !x.locked && !x.sub && ONLINE[x.st] && x.at>=TODAY;
+  }).sort(function(a,b){ return a.at-b.at; });
+}
 function realTasks(w){
   return T.filter(function(x){ return x.real && (w?x.w===w:true); })
           .sort(function(a,b){ return a.at-b.at; });
@@ -815,13 +832,14 @@ function statsHTML(){
   var unseen=vatt.filter(function(g){ return !isSeen(g); }).length;
   var vover=vatt.filter(function(g){ return vidDueOver(g) && !isSeen(g); }).length;
   var cw=curWeek();
-  var thisWeekDue=realTasks(cw).filter(function(x){ return !ST.done[x.id]; }).length;
-  var nx=nextReal(TODAY);
+  var opn=openNow().filter(function(x){ return !ST.done[x.id]; });
+  var thisWeekDue=opn.length;
+  var nx=opn[0]||nextReal(TODAY);
   var h='';
   h+='<div class="stat"><div class="k">현재 주차</div><div class="v">'+cw+'<small>/ '+NW+'주</small></div><div class="n">'+fmt2(weekStart(cw))+' – '+fmt2(weekEnd(cw))+'</div></div>';
   h+='<div class="stat"><div class="k">수강 과목</div><div class="v">7<small>과목</small></div><div class="n">왼쪽 메뉴에서 선택</div></div>';
-  h+='<div class="stat"><div class="k">이번 주 제출</div><div class="v">'+thisWeekDue+'<small>건</small></div>'+
-     '<div class="n">'+(nx?'다음 마감 '+fmt2(nx.date)+' '+esc(C[nx.c].s):'LMS 확정 기준')+'</div></div>';
+  h+='<div class="stat"><div class="k">지금 낼 수 있는 것</div><div class="v">'+thisWeekDue+'<small>건</small></div>'+
+     '<div class="n">'+(nx?esc(C[nx.c].s)+' '+fmt2(nx.date)+' 먼저':'LMS 확정 기준')+'</div></div>';
   h+='<div class="stat"><div class="k">첫 프로젝트 마감</div><div class="v">D-'+dp+'</div><div class="n">빅데이터 제안서 10/21</div></div>';
   h+='<div class="stat"><div class="k">안 본 강의 영상</div><div class="v">'+unseen+'<small>/ '+vatt.length+'</small></div>'+
      '<div class="n">'+(vover?'출석 마감 지남 '+vover+'개':'출석 반영 영상 기준')+'</div></div>';
@@ -835,7 +853,8 @@ function taskListHTML(items,tbd,showCourse){
     h+='<input class="chk" type="checkbox" data-tid="'+x.id+'"'+(done?' checked':'')+' aria-label="'+esc(x.t)+' 완료">';
     h+='<div class="body"><div class="ttl">'+linkTitle(x)+'</div><div class="meta">';
     if(showCourse!==false) h+='<a class="crs" href="#/c/'+x.c+'">'+C[x.c].s+'</a>';
-    h+='<span class="kind">'+x.kind+(x.pts?' · '+x.pts:'')+'</span></div>';
+    h+='<span class="kind">'+x.kind+(x.pts?' · '+x.pts:'')+
+       (x.locked&&x.unlock?' · '+fmt2(x.unlock)+' 열림':'')+'</span></div>';
     if(x.note) h+='<div class="note">'+x.note+'</div>';
     h+='</div>';
     var when=fmt2(x.date)+'('+DOW[x.date.getDay()]+')';
@@ -851,6 +870,22 @@ function taskListHTML(items,tbd,showCourse){
     h+='<div class="due"><div class="d">미정</div><span class="pill calm">TBD</span></div></div>';
   });
   return h;
+}
+function renderOpenNow(){
+  var root=$('#opennow'); if(!root) return;
+  var o=openNow();
+  if(!o.length){
+    var soon=T.filter(function(x){ return x.real && x.locked && x.unlock && x.unlock>TODAY; })
+              .sort(function(a,b){ return a.unlock-b.unlock; })[0];
+    root.innerHTML='<div class="empty"><b>지금 낼 수 있는 과제 없음</b>'+
+      (soon?'다음 제출란은 <b style="display:inline">'+esc(C[soon.c].s)+' '+esc(soon.t)+'</b> — '+
+            fmt2(soon.unlock)+'('+DOW[soon.unlock.getDay()]+') '+hhmm(soon.unlock)+'에 열립니다.'
+           :'열려 있는 제출란이 없습니다.')+'</div>';
+    return;
+  }
+  root.innerHTML=taskListHTML(o,[])+
+    '<div class="empty" style="border-top:0">마감이 다음 주라도 <b style="display:inline">제출란이 이미 열려 있으면 여기에 나옵니다</b> — 미리 해두라는 뜻입니다.</div>';
+  wireChecks('#opennow',function(){ renderOpenNow(); renderHomeWeek(); });
 }
 function renderHomeWeek(){
   var s=weekStart(homeWeek), e=weekEnd(homeWeek);
@@ -1059,8 +1094,11 @@ function viewHome(){
      '<h1>2026학년도 2학기<br><em>제출·프로젝트 상황판</em></h1>'+
      '<p class="mast-sub">이번 주에 낼 것이 맨 위에 있습니다. 왼쪽 메뉴에서 과목을 고르면 그 과목의 주차별 학습 내용과 강의자료, 프로젝트 목표로 넘어갑니다.</p>'+
      '<div class="rule"></div><div class="stats">'+statsHTML()+'</div></header>';
-  h+='<section id="week"><div class="shead"><h2><span class="idx">NOW</span>이번 주 제출</h2>'+
-     '<span class="hint">체크는 자동 저장됩니다</span></div>'+
+  h+='<section id="week"><div class="shead"><h2><span class="idx">NOW</span>지금 제출 가능</h2>'+
+     '<span class="hint">LMS 제출란이 열려 있는 것 · 마감 순</span></div>'+
+     '<div id="opennow"></div>'+
+     '<div class="shead" style="margin-top:34px"><h2 style="font-size:18px">'+
+     '<span class="idx">WK</span>주차별 보기</h2><span class="hint">체크는 자동 저장됩니다</span></div>'+
      '<div class="weekbar"><button class="navbtn" id="prev" aria-label="이전 주">‹</button>'+
      '<button class="navbtn" id="next" aria-label="다음 주">›</button>'+
      '<span class="wlabel" id="wlabel">—</span><span class="wrange" id="wrange"></span><span id="wtag"></span>'+
@@ -1087,6 +1125,7 @@ function viewHome(){
   h+='<footer id="foot"></footer>';
   $('#view').innerHTML=h;
 
+  renderOpenNow();
   renderHomeWeek();
   $('#prev').addEventListener('click',function(){ if(homeWeek>1){homeWeek--;renderHomeWeek();} });
   $('#next').addEventListener('click',function(){ if(homeWeek<NW){homeWeek++;renderHomeWeek();} });

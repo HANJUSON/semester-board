@@ -92,6 +92,9 @@ def pull(school: dict, token=None, verbose=True):
                                "due": a.get("due_at"), "pts": a.get("points_possible"),
                                "i": a["id"], "url": a.get("html_url"),
                                "lock": a.get("lock_at"),
+                               # 지금 낼 수 있는지 — 마감 주차가 아니라 이쪽이 기준이다
+                               "unlock": a.get("unlock_at"),
+                               "locked": bool(a.get("locked_for_user")),
                                "sub": sub.get("submitted_at"),
                                "state": sub.get("workflow_state"),
                                "st": (a.get("submission_types") or ["none"])[0]})

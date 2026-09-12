@@ -119,6 +119,7 @@ var EST=T; T=[];
   T.push({id:'a'+a.i,c:a.c,t:a.n,kind:asgKind(a),real:true,at:at,date:day,
           w:Math.floor((day-W1)/86400000/7)+1,
           pts:(a.pts!=null?a.pts+'점':''),url:a.url,sub:a.sub,state:a.state,lock:a.lock,
+          unlock:a.unlock?new Date(a.unlock):null, locked:!!a.locked, st:a.st,
           note:ANOTE[a.i]||''});
 });
 EST.forEach(function(x){
@@ -127,6 +128,14 @@ EST.forEach(function(x){
   if(sup && sup.indexOf(x.kind)>=0) return;
   T.push(x);
 });
+var ONLINE={online_upload:1,online_quiz:1,online_text_entry:1,online_url:1,media_recording:1};
+/* 지금 실제로 낼 수 있는 것 — 잠기지 않았고, 아직 안 냈고, 마감 전이며,
+   LMS 로 제출하는 형식인 것. 마감이 다음 주여도 지금 열려 있으면 미리 할 수 있다. */
+function openNow(){
+  return T.filter(function(x){
+    return x.real && !x.locked && !x.sub && ONLINE[x.st] && x.at>=TODAY;
+  }).sort(function(a,b){ return a.at-b.at; });
+}
 function realTasks(w){
   return T.filter(function(x){ return x.real && (w?x.w===w:true); })
           .sort(function(a,b){ return a.at-b.at; });
